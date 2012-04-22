@@ -12,6 +12,8 @@ class Slot(object):
         self.itemsprev = 0
         self.pages = 0
         self.pagesprev = 0
+        self.dupes = 0
+        self.dupesprev = 0
 
 class LogStats(object):
     """Log basic scraping stats periodically"""
@@ -28,6 +30,12 @@ class LogStats(object):
         dispatcher.connect(self.spider_closed, signal=signals.spider_closed)
         dispatcher.connect(self.engine_started, signal=signals.engine_started)
         dispatcher.connect(self.engine_stopped, signal=signals.engine_stopped)
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        o = cls()
+        o.crawler = crawler
+        return o
 
     def item_scraped(self, spider):
         self.slots[spider].items += 1
@@ -46,12 +54,19 @@ class LogStats(object):
         self.tsk.start(self.interval)
 
     def log(self):
+        engine = self.crawler.engine
         for spider, slot in self.slots.items():
+            slot.dupes = engine.slots[spider].scheduler.dupescount
             irate = (slot.items - slot.itemsprev) * self.multiplier
             prate = (slot.pages - slot.pagesprev) * self.multiplier
-            slot.pagesprev, slot.itemsprev = slot.pages, slot.items
-            msg = "Crawled %d pages (at %d pages/min), scraped %d items (at %d items/min)" \
-                % (slot.pages, prate, slot.items, irate)
+            drate = (slot.dupes - slot.dupesprev) * self.multiplier
+            slot.pagesprev = slot.pages
+            slot.itemsprev = slot.items
+            slot.dupesprev = slot.dupes
+            msg = "Crawled %d pages (at %d pages/min), " \
+                  "scraped %d items (at %d items/min), " \
+                  "discarded %d requests (at %d req/min)" \
+            % (slot.pages, prate, slot.items, irate, slot.dupes, drate)
             log.msg(msg, spider=spider)
 
     def engine_stopped(self):

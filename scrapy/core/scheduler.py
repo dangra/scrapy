@@ -13,6 +13,7 @@ class Scheduler(object):
 
     def __init__(self, dupefilter, jobdir=None, dqclass=None, mqclass=None, logunser=False):
         self.df = dupefilter
+        self.dupescount = 0
         self.dqdir = self._dqdir(jobdir)
         self.dqclass = dqclass
         self.mqclass = mqclass
@@ -45,6 +46,13 @@ class Scheduler(object):
 
     def enqueue_request(self, request):
         if not request.dont_filter and self.df.request_seen(request):
+            self.dupescount += 1
+            if self.dupescount <= 10:
+                log.msg('Discarded duplicate request: %s' % request,
+                        level=log.DEBUG, spider=self.spider)
+                if self.dupescount == 10:
+                    log.msg('Disabled logging of duplicate requests',
+                            level=log.DEBUG, spider=self.spider)
             return
         if not self._dqpush(request):
             self._mqpush(request)
