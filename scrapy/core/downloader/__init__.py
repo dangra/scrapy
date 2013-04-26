@@ -73,9 +73,9 @@ class Downloader(object):
         self.domain_concurrency = self.settings.getint('CONCURRENT_REQUESTS_PER_DOMAIN')
         self.ip_concurrency = self.settings.getint('CONCURRENT_REQUESTS_PER_IP')
         self.middleware = DownloaderMiddlewareManager.from_crawler(crawler)
-        self.idled = set()
-        self._idled_loop = task.LoopingCall(self._idled_check, self.idled)
-        self._idled_loop.start(30, now=False)
+        self._gc_slots = set()
+        self._gc_loop = task.LoopingCall(self._gc_slots)
+        self._gc_loop.start(30, now=False)
 
     def fetch(self, request, spider):
         def _deactivate(response):
@@ -115,7 +115,7 @@ class Downloader(object):
         def _deactivate(response):
             slot.active.remove(request)
             if not slot.active:
-                self.idled.add((key, slot))
+                self._gc_slots.add(key)
             return response
 
         slot.active.add(request)
@@ -181,7 +181,7 @@ class Downloader(object):
         return not self.slots
 
     def close(self):
-        self._idled_loop.stop()
+        self._gc_loop.stop()
         for key, slot in self.slots.iteritems():
             print 'SLOT CLOSED', key, _ppcounters(slot.counters)
             if slot.latercall and slot.latercall.active():
@@ -189,21 +189,23 @@ class Downloader(object):
             if slot.closecall and slot.closecall.active():
                 slot.closecall.cancel()
 
-    def _idled_check(self, idled):
+    def _gc_slots(self):
         mark = time() - 10
-        active = []
-        for key, slot in idled:
+        gone = []
+        for key in self._gc_slots:
+            slot = self.slots[key]
             c = slot.counters
             c['tested'] += 1
             if slot.active:
-                c['active'] += 1
-                active.append((key, slot))
+                c['reactivated'] += 1
+                gone.append((key, slot))
             elif slot.lastseen < mark:
+                gone.append(key)
                 del self.slots[key]
                 print 'SLOT REMOVED', key, _ppcounters(c)
 
-        for p in active:
-            idled.remove(p)
+        for k in gone:
+            self._gc_slots.remove(k)
 
 
 def _ppcounters(c):

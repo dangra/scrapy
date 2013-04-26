@@ -15,7 +15,7 @@ class FollowAllSpider(BaseSpider):
     def __init__(self, total=10, show=20, order="rand"):
         self.urls_visited = []
         self.times = []
-        url = "http://localhost:8998/follow?total=%d&show=%d&order=%s" % (total, show, order)
+        url = "http://localhost:8998/follow?total=%s&show=%s&order=%s" % (total, show, order)
         self.start_urls = [url]
 
     def parse(self, response):
