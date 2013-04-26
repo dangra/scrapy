@@ -1,7 +1,7 @@
 import random
 import warnings
 from time import time
-from collections import deque
+from collections import deque, defaultdict
 
 from twisted.internet import reactor, defer
 
@@ -19,7 +19,7 @@ class Slot(object):
 
     def __init__(self, concurrency, delay, settings):
         self.concurrency = concurrency
-        self.delay = delay
+        self.delay = delay or 0
         self.randomize_delay = settings.getbool('RANDOMIZE_DOWNLOAD_DELAY')
         self.active = set()
         self.queue = deque()
@@ -27,6 +27,7 @@ class Slot(object):
         self.lastseen = 0
         self.latercall = None
         self.closecall = None
+        self.counters = defaultdict(int)
 
     def free_transfer_slots(self):
         return self.concurrency - len(self.transferring)
@@ -183,13 +184,24 @@ class Downloader(object):
                 slot.closecall.cancel()
 
     def _maybe_close_slot(self, slot, key):
+        c = slot.counters
+        c['tested'] += 1
         if not slot.active:
-            closedelay = slot.delay*2 or 1
-            if slot.closecall:
+            c['inactive'] += 1
+            closedelay = slot.delay + 1
+            if slot.closecall and slot.closecall.active():
+                c['reset'] += 1
                 slot.closecall.reset(closedelay)
             else:
+                c['new'] += 1
                 slot.closecall = reactor.callLater(closedelay, self._do_close_slot, slot, key)
+        else:
+            c['active'] += 1
 
     def _do_close_slot(self, slot, key):
+        c = slot.counters
         if not slot.active:
+            print 'SLOT REMOVED', key, ' '.join('%s=%s' % (k, c[k]) for k in ('tested', 'active', 'inactive', 'reset', 'new', 'closefailed'))
             del self.slots[key]
+        else:
+            c['closefailed'] += 1
