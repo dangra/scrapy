@@ -6,17 +6,15 @@ from scrapy.utils.sitemap import Sitemap, sitemap_urls_from_robots
 from scrapy.utils.gz import gunzip, is_gzipped
 from scrapy import log
 
+
 class SitemapSpider(BaseSpider):
 
     sitemap_urls = ()
     sitemap_rules = [('', 'parse')]
     sitemap_follow = ['']
+    sitemap_alternate_links = False
 
     def __init__(self, *a, **kw):
-        self._alternate = False
-        if 'alternate' in kw and kw.pop('alternate') == True:
-            self._alternate = True
-
         super(SitemapSpider, self).__init__(*a, **kw)
         self._cbs = []
         for r, c in self.sitemap_rules:
@@ -41,7 +39,7 @@ class SitemapSpider(BaseSpider):
 
             s = Sitemap(body)
             if s.type == 'sitemapindex':
-                for loc in iterloc(s, self._alternate):
+                for loc in iterloc(s, self.sitemap_alternate_links):
                     if any(x.search(loc) for x in self._follow):
                         yield Request(loc, callback=self._parse_sitemap)
             elif s.type == 'urlset':
@@ -64,16 +62,17 @@ class SitemapSpider(BaseSpider):
         elif response.url.endswith('.xml.gz'):
             return gunzip(response.body)
 
+
 def regex(x):
     if isinstance(x, basestring):
         return re.compile(x)
     return x
 
+
 def iterloc(it, alt=False):
     for d in it:
         yield d['loc']
-
         # Also consider alternate URLs (xhtml:link rel="alternate")
-        if alt == True and 'alternate' in d:
+        if alt and 'alternate' in d:
             for l in d['alternate']:
                 yield l

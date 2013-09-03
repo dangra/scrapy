@@ -25,10 +25,12 @@ class Sitemap(object):
                 name = tag.split('}', 1)[1] if '}' in tag else tag
 
                 if name == 'link':
-                    d.setdefault('alternate', []).append(el.get('href'))
+                    href = el.get('href')
+                    if href:
+                        d.setdefault('alternate', []).append(href)
                 else:
                     d[name] = el.text.strip() if el.text else ''
-            
+
             if 'loc' in d:
                 yield d
 

@@ -171,9 +171,10 @@ Disallow: /forum/active/
                 href="http://www.example.com/schweiz-deutsch/"/>
             <xhtml:link rel="alternate" hreflang="en"
                 href="http://www.example.com/english/"/>
+            <xhtml:link rel="alternate" bogus=1/>
         </url>
     </urlset>""")
-        
+
         self.assertEqual(list(s), [
             {'loc': 'http://www.example.com/english/',
              'alternate': ['http://www.example.com/deutsch/', 'http://www.example.com/schweiz-deutsch/', 'http://www.example.com/english/']
