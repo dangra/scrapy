@@ -55,6 +55,10 @@ class BaseSpider(object_ref):
     def parse(self, response):
         raise NotImplementedError
 
+    def recover(self, failure):
+        """Default error handler for requests without errback"""
+        return failure
+
     @classmethod
     def handles_request(cls, request):
         return url_is_from_spider(request.url, cls)
