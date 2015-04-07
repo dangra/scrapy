@@ -27,7 +27,7 @@ from scrapy.xlib.tx import (
     _HTTP11ClientFactory as TxHTTP11ClientFactory,
     HTTP11ClientProtocol as TxHTTP11ClientProtocol,
     HTTPClientParser as TxHTTPClientParser,
-    TransportProxyProducer, Response, ParseError, RequestNotSent
+    Response, ParseError
 )
 import six
 if six.PY2:
@@ -65,60 +65,17 @@ class HTTPClientParser(TxHTTPClientParser):
             self.transport)
 
 
-from twisted.python.failure import Failure
-from twisted.internet.defer import Deferred, fail, maybeDeferred
-from twisted.internet.defer import CancelledError
 class HTTP11ClientProtocol(TxHTTP11ClientProtocol):
 
-    def parser(self, request, finisher):
-        return HTTPClientParser(request, finisher)
+    __parser = None
 
-    def request(self, request):
-        if self._state != 'QUIESCENT':
-            return fail(RequestNotSent())
+    @property
+    def _parser(self):
+        return self.__parser
 
-        self._state = 'TRANSMITTING'
-        _requestDeferred = maybeDeferred(request.writeTo, self.transport)
-
-        def cancelRequest(ign):
-            # Explicitly cancel the request's deferred if it's still trying to
-            # write when this request is cancelled.
-            if self._state in (
-                    'TRANSMITTING', 'TRANSMITTING_AFTER_RECEIVING_RESPONSE'):
-                _requestDeferred.cancel()
-            else:
-                self.transport.abortConnection()
-                self._disconnectParser(Failure(CancelledError()))
-        self._finishedRequest = Deferred(cancelRequest)
-
-        # Keep track of the Request object in case we need to call stopWriting
-        # on it.
-        self._currentRequest = request
-
-        self._transportProxy = TransportProxyProducer(self.transport)
-        # XXX: only line we're overwriting in this subclassed method:
-        self._parser = self.parser(request, self._finishResponse)
-        self._parser.makeConnection(self._transportProxy)
-        self._responseDeferred = self._parser._responseDeferred
-
-        def cbRequestWrotten(ignored):
-            if self._state == 'TRANSMITTING':
-                self._state = 'WAITING'
-                self._responseDeferred.chainDeferred(self._finishedRequest)
-
-        def ebRequestWriting(err):
-            if self._state == 'TRANSMITTING':
-                self._state = 'GENERATION_FAILED'
-                self.transport.abortConnection()
-                self._finishedRequest.errback(
-                    Failure(RequestGenerationFailed([err])))
-            else:
-                log.err(err, 'Error writing request, but not in valid state '
-                             'to finalize request: %s' % self._state)
-
-        _requestDeferred.addCallbacks(cbRequestWrotten, ebRequestWriting)
-
-        return self._finishedRequest
+    @_parser.setter
+    def _parser(self, value):
+        self.__parser = HTTPClientParser(value.request, value.finisher)
 
 
 class _HTTP11ClientFactory(TxHTTP11ClientFactory):
